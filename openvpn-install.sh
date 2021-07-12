@@ -1,8 +1,21 @@
 #!/bin/bash
 # shellcheck disable=SC1091,SC2164,SC2034,SC1072,SC1073,SC1009
 
+set -x
+
 # Secure OpenVPN server installer for Debian, Ubuntu, CentOS, Amazon Linux 2, Fedora, Oracle Linux 8, Arch Linux and Rocky Linux.
 # https://github.com/angristan/openvpn-install
+
+if [ -z "${SCRIPT_HOME}" ]; then
+    if hash dirname 2>/dev/null; then
+        SCRIPT_DIRNAME="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
+        export SCRIPT_HOME=${SCRIPT_DIRNAME}
+    else
+        export SCRIPT_HOME=${PWD}
+    fi
+else
+    export SCRIPT_HOME=${PWD}
+fi
 
 function isRoot() {
 	if [ "$EUID" -ne 0 ]; then
@@ -624,6 +637,8 @@ function installOpenVPN() {
 		CLIENT=${CLIENT:-client}
 		PASS=${PASS:-1}
 		CONTINUE=${CONTINUE:-y}
+		CA_PASS=${CA_PASS:-"file:${SCRIPT_HOME}/ca-passfile"} # stdin | file:some-file/som/where
+		
 
 		# Behind NAT, we'll default to the publicly reachable IPv4/IPv6.
 		if [[ $IPV6_SUPPORT == "y" ]]; then
@@ -699,6 +714,7 @@ function installOpenVPN() {
 		NOGROUP=nobody
 	fi
 
+	vars=${SCRIPT_HOME}/vars.created
 	# Install the latest version of easy-rsa from source, if not already installed.
 	if [[ ! -d /etc/openvpn/easy-rsa/ ]]; then
 		local version="3.0.7"
@@ -710,11 +726,11 @@ function installOpenVPN() {
 		cd /etc/openvpn/easy-rsa/ || return
 		case $CERT_TYPE in
 		1)
-			echo "set_var EASYRSA_ALGO ec" >vars
-			echo "set_var EASYRSA_CURVE $CERT_CURVE" >>vars
+			echo "set_var EASYRSA_ALGO ec" >$vars
+			echo "set_var EASYRSA_CURVE $CERT_CURVE" >>$vars
 			;;
 		2)
-			echo "set_var EASYRSA_KEY_SIZE $RSA_KEY_SIZE" >vars
+			echo "set_var EASYRSA_KEY_SIZE $RSA_KEY_SIZE" >$vars
 			;;
 		esac
 
@@ -724,19 +740,19 @@ function installOpenVPN() {
 		SERVER_NAME="server_$(head /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 16 | head -n 1)"
 		echo "$SERVER_NAME" >SERVER_NAME_GENERATED
 
-		echo "set_var EASYRSA_REQ_CN $SERVER_CN" >>vars
+		echo "set_var EASYRSA_REQ_CN $SERVER_CN" >>$vars
 
 		# Create the PKI, set up the CA, the DH params and the server certificate
-		./easyrsa init-pki
-		./easyrsa --batch build-ca nopass
+		./easyrsa --vars=$vars init-pki
+		./easyrsa --passin=${CA_PASS} --passout=${CA_PASS} --vars=$vars --batch build-ca
 
 		if [[ $DH_TYPE == "2" ]]; then
 			# ECDH keys are generated on-the-fly so we don't need to generate them beforehand
 			openssl dhparam -out dh.pem $DH_KEY_SIZE
 		fi
 
-		./easyrsa build-server-full "$SERVER_NAME" nopass
-		EASYRSA_CRL_DAYS=3650 ./easyrsa gen-crl
+		./easyrsa --passin=${CA_PASS} --vars=$vars build-server-full "$SERVER_NAME" nopass
+		EASYRSA_CRL_DAYS=3650 ./easyrsa --passin=${CA_PASS} --vars=$vars gen-crl
 
 		case $TLS_SIG in
 		1)
