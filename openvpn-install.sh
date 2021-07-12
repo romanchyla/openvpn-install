@@ -404,14 +404,14 @@ function installQuestions() {
 	done
 	if [[ $CUSTOMIZE_ENC == "n" ]]; then
 		# Use default, sane and fast parameters
-		CIPHER="AES-128-GCM"
-		CERT_TYPE="1" # ECDSA
-		CERT_CURVE="prime256v1"
-		CC_CIPHER="TLS-ECDHE-ECDSA-WITH-AES-128-GCM-SHA256"
-		DH_TYPE="1" # ECDH
-		DH_CURVE="prime256v1"
-		HMAC_ALG="SHA256"
-		TLS_SIG="1" # tls-crypt
+		CIPHER=${CIPHER:-"AES-128-GCM"}
+		CERT_TYPE=${CERT_TYPE:-"1"} # ECDSA
+		CERT_CURVE=${CERT_CURVE:-"prime256v1"}
+		CC_CIPHER=${CC_CIPHER:-"TLS-ECDHE-ECDSA-WITH-AES-128-GCM-SHA256"}
+		DH_TYPE=${DH_TYPE:-"1"} # ECDH
+		DH_CURVE=${DH_CURVE:-"prime256v1"}
+		HMAC_ALG=${HMAC_ALG:-"SHA256"}
+		TLS_SIG=${TLS_SIG:-"1"} # tls-crypt
 	else
 		echo ""
 		echo "Choose which cipher you want to use for the data channel:"
