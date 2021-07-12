@@ -638,7 +638,7 @@ function installOpenVPN() {
 		PASS=${PASS:-1}
 		CONTINUE=${CONTINUE:-y}
 		CA_PASS=${CA_PASS:-"file:${SCRIPT_HOME}/ca-passfile"} # stdin | file:some-file/som/where
-		
+		CREATE_CLIENT=${CREATE_CLIENT:-n}
 
 		# Behind NAT, we'll default to the publicly reachable IPv4/IPv6.
 		if [[ $IPV6_SUPPORT == "y" ]]; then
@@ -651,6 +651,11 @@ function installOpenVPN() {
 
 	# Run setup questions first, and set other variales if auto-install
 	installQuestions
+
+	if [[ ! -z "${CA_PASS}" ]]; then
+		passin="--passin=${CA_PASS}"
+		passout="--passout=${CA_PASS}"
+	fi
 
 	# Get the "public" interface from the default route
 	NIC=$(ip -4 route ls | grep default | grep -Po '(?<=dev )(\S+)' | head -1)
@@ -744,15 +749,19 @@ function installOpenVPN() {
 
 		# Create the PKI, set up the CA, the DH params and the server certificate
 		./easyrsa --vars=$vars init-pki
-		./easyrsa --passin=${CA_PASS} --passout=${CA_PASS} --vars=$vars --batch build-ca
+		if [[ -z "$passin" ]]; then
+			./easyrsa --vars=$vars --batch build-ca nopass
+		else
+			./easyrsa $passin $passout --vars=$vars --batch build-ca
+		fi
 
 		if [[ $DH_TYPE == "2" ]]; then
 			# ECDH keys are generated on-the-fly so we don't need to generate them beforehand
 			openssl dhparam -out dh.pem $DH_KEY_SIZE
 		fi
 
-		./easyrsa --passin=${CA_PASS} --vars=$vars build-server-full "$SERVER_NAME" nopass
-		EASYRSA_CRL_DAYS=3650 ./easyrsa --passin=${CA_PASS} --vars=$vars gen-crl
+		./easyrsa $passin --vars=$vars build-server-full "$SERVER_NAME" nopass
+		EASYRSA_CRL_DAYS=3650 ./easyrsa $passin --vars=$vars gen-crl
 
 		case $TLS_SIG in
 		1)
@@ -1070,7 +1079,12 @@ verb 3" >>/etc/openvpn/client-template.txt
 	fi
 
 	# Generate the custom client.ovpn
-	newClient
+	until [[ $CREATE_CLIENT =~ (y|n) ]]; do
+		read -rp"Create a new client? [y/n]: " -e -i n CREATE_CLIENT
+	done
+	if [[ $CREATE_CLIENT == "y" ]];then
+		newClient
+	fi
 	echo "If you want to add more clients, you simply need to run this script another time!"
 }
 
